@@ -1,12 +1,12 @@
 """
-天气预报插件 
+天气预报插件
 定时获取指定地区天气并推送到群聊，支持 /天气 和 /weather 手动查询。
 """
 
 import asyncio
 import datetime
 import re
-from typing import Any
+from typing import Any, ClassVar
 
 from maibot_sdk import Command, Field, MaiBotPlugin, PluginConfigBase, Tool
 from maibot_sdk.types import ToolParameterInfo, ToolParamType
@@ -17,34 +17,44 @@ from .weather_service import WeatherService
 class PluginSectionConfig(PluginConfigBase):
     """插件基础配置。"""
 
-    __ui_label__ = "插件"
-    __ui_icon__ = "package"
-    __ui_order__ = 0
+    __ui_label__: ClassVar[str] = "插件开关"
+    __ui_order__: ClassVar[int] = 0
 
-    enabled: bool = Field(default=True, description="是否启用插件")
-    config_version: str = Field(default="2.0.0", description="配置版本")
+    enabled: bool = Field(
+        default=True,
+        description="是否启用本插件。",
+        json_schema_extra={"hint": "插件总开关。", "label": "启用插件", "order": 0},
+    )
+    config_version: str = Field(
+        default="2.0.0",
+        json_schema_extra={"disabled": True, "hidden": True, "label": "配置版本", "order": 99},
+    )
 
 
 class WeatherConfig(PluginConfigBase):
     """天气 API 配置。"""
 
-    __ui_label__ = "天气API"
-    __ui_icon__ = "cloud"
-    __ui_order__ = 1
+    __ui_label__: ClassVar[str] = "天气 API"
+    __ui_order__: ClassVar[int] = 1
 
     amap_key: str = Field(
         default="your_amap_key_here",
-        description="高德地图API密钥，申请地址: https://console.amap.com/dev/key/app",
+        description="高德地图 Web服务 API 密钥。",
+        json_schema_extra={
+            "hint": "申请地址：https://console.amap.com/dev/key/app",
+            "label": "高德地图 API Key（必填）",
+            "placeholder": "在此填入您的 Key",
+            "order": 0,
+            "required": True,
+        },
     )
-
 
 
 class GroupsConfig(PluginConfigBase):
     """群聊推送配置。"""
 
-    __ui_label__ = "群聊推送"
-    __ui_icon__ = "users"
-    __ui_order__ = 2
+    __ui_label__: ClassVar[str] = "群聊推送"
+    __ui_order__: ClassVar[int] = 2
 
     target_groups: list[str] = Field(
         default_factory=list,
@@ -66,33 +76,83 @@ class GroupsConfig(PluginConfigBase):
 class ScheduleConfig(PluginConfigBase):
     """定时任务配置。"""
 
-    __ui_label__ = "定时任务"
-    __ui_icon__ = "clock"
-    __ui_order__ = 3
+    __ui_label__: ClassVar[str] = "定时任务"
+    __ui_order__: ClassVar[int] = 3
 
-    broadcast_enabled: bool = Field(default=True, description="是否启用定时推送（关闭后指令和工具仍可用）")
-    broadcast_time: str = Field(default="08:00", description="每日播报时间 (HH:MM格式)")
+    broadcast_enabled: bool = Field(
+        default=True,
+        description="是否启用定时推送。",
+        json_schema_extra={
+            "hint": "关闭后手动指令和 LLM 工具仍可正常使用。",
+            "label": "启用定时推送",
+            "order": 0,
+        },
+    )
+    broadcast_time: str = Field(
+        default="08:00",
+        description="每日播报时间。",
+        json_schema_extra={
+            "hint": "格式 HH:MM，24小时制。",
+            "label": "播报时间",
+            "placeholder": "08:00",
+            "order": 1,
+        },
+    )
 
 
 class BroadcastConfig(PluginConfigBase):
     """播报内容配置。"""
 
-    __ui_label__ = "播报"
-    __ui_icon__ = "message-circle"
-    __ui_order__ = 4
+    __ui_label__: ClassVar[str] = "播报"
+    __ui_order__: ClassVar[int] = 4
 
-    max_length: int = Field(default=200, description="播报内容最大字数")
+    max_length: int = Field(
+        default=200,
+        description="播报内容最大字数。",
+        json_schema_extra={
+            "hint": "LLM 生成的播报文本将被截断到该长度。",
+            "label": "最大字数",
+            "order": 0,
+            "step": 50,
+        },
+    )
+    model_name: str = Field(
+        default="replyer",
+        description="播报生成使用的模型任务名。",
+        json_schema_extra={
+            "hint": "可选：replyer、utils、planner 等，留空使用 Host 默认模型。",
+            "label": "模型任务名",
+            "placeholder": "replyer",
+            "order": 1,
+        },
+    )
 
 
 class ToolConfig(PluginConfigBase):
     """天气查询工具配置。"""
 
-    __ui_label__ = "查询工具"
-    __ui_icon__ = "search"
-    __ui_order__ = 5
+    __ui_label__: ClassVar[str] = "查询工具"
+    __ui_order__: ClassVar[int] = 5
 
-    enabled: bool = Field(default=True, description="是否启用天气查询工具（供LLM调用）")
-    default_days: int = Field(default=3, description="默认返回未来几天预报（1-4）")
+    enabled: bool = Field(
+        default=True,
+        description="是否启用天气查询工具。",
+        json_schema_extra={
+            "hint": "启用后 LLM 可在对话中自动调用天气查询。",
+            "label": "启用 LLM 查询工具",
+            "order": 0,
+        },
+    )
+    default_days: int = Field(
+        default=3,
+        description="默认返回未来几天预报。",
+        json_schema_extra={
+            "hint": "范围 1-4 天。",
+            "label": "默认预报天数",
+            "order": 1,
+            "step": 1,
+        },
+    )
 
 
 class WeatherForecastPluginConfig(PluginConfigBase):
@@ -244,7 +304,11 @@ class WeatherForecastPlugin(MaiBotPlugin):
             f"6. 可加入关心建议，如提醒带伞、添衣。\n"
         )
 
-        result = await self.ctx.llm.generate(prompt, model="utils")
+        model_name = (self.config.broadcast.model_name or "").strip()
+        kwargs: dict[str, Any] = {"prompt": prompt}
+        if model_name:
+            kwargs["model"] = model_name
+        result = await self.ctx.llm.generate(**kwargs)
         if not result.get("success"):
             self.ctx.logger.error("LLM生成播报失败")
             return None
