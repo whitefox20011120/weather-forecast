@@ -70,6 +70,7 @@ class ScheduleConfig(PluginConfigBase):
     __ui_icon__ = "clock"
     __ui_order__ = 3
 
+    broadcast_enabled: bool = Field(default=True, description="是否启用定时推送（关闭后指令和工具仍可用）")
     broadcast_time: str = Field(default="08:00", description="每日播报时间 (HH:MM格式)")
 
 
@@ -161,7 +162,10 @@ class WeatherForecastPlugin(MaiBotPlugin):
                 wait = (target - now).total_seconds()
                 self.ctx.logger.info(f"下次天气播报: {target.strftime('%Y-%m-%d %H:%M')}")
                 await asyncio.sleep(wait)
-                await self._broadcast_all()
+                if self.config.schedule.broadcast_enabled:
+                    await self._broadcast_all()
+                else:
+                    self.ctx.logger.info("定时推送已关闭，跳过本次播报")
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -180,36 +184,42 @@ class WeatherForecastPlugin(MaiBotPlugin):
             self.ctx.logger.error("未配置高德地图API密钥")
             return
 
+        location_to_groups: dict[str, list[str]] = {}
         for group_id, location in groups:
+            location_to_groups.setdefault(location, []).append(group_id)
+
+        broadcast_cache: dict[str, str] = {}
+        for location, group_ids in location_to_groups.items():
             try:
-                await self._send_weather_to_group(service, group_id, location)
-                await asyncio.sleep(2)
+                if location not in broadcast_cache:
+                    city_info = await service.resolve_city(location)
+                    if not city_info:
+                        self.ctx.logger.warning(f"无法解析地点: {location}")
+                        continue
+                    weather_text = await service.get_region_summary(city_info["adcode"], location)
+                    if not weather_text:
+                        self.ctx.logger.warning(f"获取天气数据失败: {location}")
+                        continue
+                    broadcast = await self._generate_broadcast(weather_text)
+                    if not broadcast:
+                        continue
+                    broadcast_cache[location] = broadcast
+
+                text = broadcast_cache[location]
+                for group_id in group_ids:
+                    try:
+                        stream = await self.ctx.chat.get_stream_by_group_id(group_id)
+                        if not stream:
+                            self.ctx.logger.warning(f"未找到群聊流: {group_id}")
+                            continue
+                        stream_id = stream.get("stream_id", "") if isinstance(stream, dict) else str(stream)
+                        await self.ctx.send.text(text, stream_id)
+                        self.ctx.logger.info(f"天气播报已发送: {group_id} ({location})")
+                        await asyncio.sleep(2)
+                    except Exception as e:
+                        self.ctx.logger.error(f"发送到群 {group_id} 失败: {e}")
             except Exception as e:
-                self.ctx.logger.error(f"向群 {group_id} 播报失败: {e}")
-
-    async def _send_weather_to_group(self, service: WeatherService, group_id: str, location: str) -> None:
-        city_info = await service.resolve_city(location)
-        if not city_info:
-            self.ctx.logger.warning(f"无法解析地点: {location}")
-            return
-
-        weather_text = await service.get_region_summary(city_info["adcode"], location)
-        if not weather_text:
-            self.ctx.logger.warning(f"获取天气数据失败: {location}")
-            return
-
-        broadcast = await self._generate_broadcast(weather_text)
-        if not broadcast:
-            return
-
-        stream = await self.ctx.chat.get_stream_by_group_id(group_id)
-        if not stream:
-            self.ctx.logger.warning(f"未找到群聊流: {group_id}")
-            return
-
-        stream_id = stream.get("stream_id", "") if isinstance(stream, dict) else str(stream)
-        await self.ctx.send.text(broadcast, stream_id)
-        self.ctx.logger.info(f"天气播报已发送: {group_id} ({location})")
+                self.ctx.logger.error(f"处理地点 {location} 播报失败: {e}")
 
 
     async def _generate_broadcast(self, weather_info: str) -> str | None:
