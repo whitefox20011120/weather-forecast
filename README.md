@@ -1,17 +1,16 @@
-# 天气预报插件 (Weather Forecast Plugin)
+# 天气预报插件
 
 ## 功能
 
 - 每天定时向指定群聊推送天气播报（使用 bot 人设生成个性化内容）
 - 支持每个群聊配置不同的地点
 - 手动查询：`/天气 地点` 或 `/weather 地点`
-- 提供 LLM 天气查询工具，bot 被问到天气时可自动调用
+- 提供 LLM 天气查询工具，麦麦被问到天气时可自动调用
 
 ## 快速开始
 
 1. 获取高德地图 API 密钥：https://console.amap.com/dev/key/app
 2. 编辑 `config.toml`，填入 API 密钥和群聊配置
-3. 重启 MaiBot
 
 ## 配置说明
 
