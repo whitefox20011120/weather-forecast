@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
-  "version": "2.0.0",
-  "name": "天气播报插件",
+  "version": "2.0.1",
+  "name": "天气预报插件",
   "description": "定时获取指定地区天气并推送到群聊，支持手动查询指定地点天气",
   "author": {
     "name": "白狐",
@@ -33,5 +33,6 @@
       "zh-CN"
     ]
   },
-  "id": "whitefox.weather-forecast"
+  "id": "whitefox.weather-forecast",
+  "plugin_type": "service"
 }
